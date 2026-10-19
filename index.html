@@ -35,9 +35,6 @@
   .tag-rank { margin-top:14px; padding-top:12px; border-top:1px solid var(--line); }
   .tag-rank .row { align-items:center; }
   .ghost { background:var(--card); color:var(--accent); border:1px solid var(--accent); }
-  .chips { list-style:none; display:flex; flex-wrap:wrap; gap:8px; padding:0; margin:12px 0 0; }
-  .chip { background:var(--bg); color:var(--text); border:1px solid var(--line); padding:6px 12px; border-radius:99px; font-size:.85rem; }
-  .chip b { color:var(--accent); }
   .cards { display:grid; grid-template-columns:repeat(auto-fill,minmax(230px,1fr)); gap:14px; padding:0; margin:0 0 20px; list-style:none; }
   .gh { margin:18px 0 10px; font-size:1.05rem; }
   .step { margin-bottom:12px; }
@@ -187,8 +184,8 @@
             <option value="grow">인스타 계정 키우기</option>
           </select>
         </label>
-        <label>해시태그
-          <input type="text" id="stag" maxlength="50" list="topics" placeholder="예: 먹방" autocomplete="off">
+        <label>인기 순위
+          <select id="spick"></select>
         </label>
         <label>정렬
           <select id="ssort">
@@ -200,18 +197,16 @@
       </div>
       <div class="tag-rank">
         <div class="row">
-          <button type="button" id="srank" class="ghost">해시태그 인기 순위 확인</button>
+          <button type="button" id="srank" class="ghost">인기 순위 새로고침</button>
           <span class="hint" id="srankmsg" role="status" style="margin:0"></span>
         </div>
-        <ol class="chips" id="stags"></ol>
-        <p class="hint">해시태그를 누르면 바로 그 해시태그의 인기 영상을 불러옵니다.</p>
       </div>
     </div>
 
     <div class="panel step go-panel">
       <h3 class="stitle">② 불러오기</h3>
       <button type="submit" id="sgo">불러오기</button>
-      <p class="hint">해시태그 영상 20개를 모아 정렬한 뒤 상위 10개를 보여 줍니다. 1~2분 걸릴 수 있어요. 불러올 때마다 Apify 무료 크레딧(매달 제공)이 조금씩 차감되며, 남은 양은 Apify 화면의 Usage에서 볼 수 있습니다. 공식 기능이 아니라서 가끔 실패하면 잠시 후 다시 눌러 주세요.</p>
+      <p class="hint">고른 순위 항목의 영상 20개를 모아 정렬한 뒤 상위 10개를 보여 줍니다. 1~2분 걸릴 수 있어요. 불러올 때마다 Apify 무료 크레딧(매달 제공)이 조금씩 차감되며, 남은 양은 Apify 화면의 Usage에서 볼 수 있습니다. 공식 기능이 아니라서 가끔 실패하면 잠시 후 다시 눌러 주세요.</p>
     </div>
   </form>
 
@@ -541,7 +536,7 @@
 
   // 틱톡·인스타그램: 공식 인기 영상 API가 없어 Apify 수집기(actor)로 해시태그 영상을 모은 뒤 직접 정렬한다.
   var STOKEN_STORE = "trend.apifyToken", STOKENOK_STORE = "trend.apifyOk";
-  var sform = $("sform"), stokenEl = $("stoken"), splatEl = $("splat"), stagEl = $("stag"), ssortEl = $("ssort");
+  var sform = $("sform"), stokenEl = $("stoken"), splatEl = $("splat"), spickEl = $("spick"), ssortEl = $("ssort");
   var sgo = $("sgo"), sstatus = $("sstatus"), sgrid = $("sgrid");
   var sKeyPanel = $("sKeyPanel"), sKeyToggle = $("sKeyToggle");
   var FETCH_N = 20, SHOW_N = 10;
@@ -686,19 +681,18 @@
     sLast = [];
     sgrid.textContent = "";
     if (!token) { markTokenOk(false); sSetStatus("Apify 토큰을 입력하세요.", true); return; }
-    // 해시태그에는 #과 공백을 쓸 수 없다.
-    var tag = stagEl.value.replace(/[#\s]/g, "");
-    if (!tag) { sSetStatus("해시태그를 입력하세요.", true); return; }
+    var tag = spickEl.value;
+    if (!tag) { sSetStatus("인기 순위에서 하나를 고르세요.", true); return; }
     var actor = ACTORS[splatEl.value];
 
     sgo.disabled = true;
-    sSetStatus(actor.name + " #" + tag + " 영상을 모으는 중... (1~2분 걸릴 수 있어요)");
+    sSetStatus(actor.name + " · " + tag + " 영상을 모으는 중... (1~2분 걸릴 수 있어요)");
     apifyRun(actor.id, actor.input(tag), token).then(function (items) {
       markTokenOk(true);
       // 수집기가 실패 항목({error: ...})을 섞어 줄 수 있어 주소가 있는 것만 남긴다.
       sLast = items.map(actor.norm).filter(function (v) { return safeUrl(v.url); });
-      sStamp = actor.name + " · #" + tag + " · " + new Date().toLocaleString("ko-KR") + " 기준";
-      if (!sLast.length) { sSetStatus("표시할 영상이 없습니다. 다른 해시태그를 입력해 보세요."); return; }
+      sStamp = actor.name + " · " + tag + " · " + new Date().toLocaleString("ko-KR") + " 기준";
+      if (!sLast.length) { sSetStatus("표시할 영상이 없습니다. 인기 순위에서 다른 항목을 골라 보세요."); return; }
       renderSocial();
     }).catch(function (err) {
       if (err.tokenBad) markTokenOk(false);
@@ -706,8 +700,8 @@
     }).then(function () { sgo.disabled = false; });
   });
 
-  // 카테고리별 후보 해시태그. '순위 확인'을 누르면 해시태그마다 인스타그램 릴스 몇 개를 받아
-  // 조회수 합으로 순위를 매겨 상위 10개를 보여 준다. (게시물 수 수집기는 한글 해시태그를 처리하지 못함)
+  // 카테고리별 후보 해시태그. '순위 새로고침'을 누르면 해시태그마다 인스타그램 릴스 몇 개를 받아
+  // 조회수 합으로 순위를 매겨 상위 10개를 '인기 순위' 목록에 넣는다. (게시물 수 수집기는 한글 해시태그를 처리하지 못함)
   var TAGS = {
     hot: ["일상", "먹방", "맛집", "카페", "여행", "데일리룩", "운동", "다이어트", "강아지", "고양이", "육아", "요리"],
     ai: ["AI", "인공지능", "챗GPT", "chatgpt", "생성형AI", "AI그림", "AI영상", "AI툴", "AI부업", "미드저니", "업무자동화", "클로드"],
@@ -715,8 +709,23 @@
       "콘텐츠마케팅", "1인사업", "온라인마케팅", "브랜딩", "인플루언서"]
   };
   var RANK_STORE = "trend.tagRank2", RANK_N = 10, RANK_SAMPLE = 5;
-  var scatEl = $("scat"), srank = $("srank"), srankmsg = $("srankmsg"), stagsEl = $("stags");
+  // 처음 열었을 때 쓰는 순위 (2026-10-20에 같은 방법으로 확인한 값, 단위: 조회수 천)
+  var SEED_AT = "2026. 10. 20.";
+  var SEED = {
+    hot: [["요리", 1160], ["맛집", 712], ["카페", 586], ["데일리룩", 394], ["여행", 278], ["먹방", 234], ["강아지", 133],
+      ["고양이", 80], ["일상", 53], ["육아", 38]],
+    ai: [["인공지능", 1844], ["생성형AI", 1188], ["AI그림", 1180], ["미드저니", 777], ["챗GPT", 509], ["클로드", 471],
+      ["AI툴", 321], ["chatgpt", 306], ["AI영상", 146], ["AI", 107]],
+    grow: [["인스타그램마케팅", 4114], ["릴스편집", 906], ["인스타키우기", 864], ["SNS마케팅", 779], ["릴스만들기", 769],
+      ["브랜딩", 757], ["온라인마케팅", 732], ["콘텐츠마케팅", 726], ["인플루언서", 536], ["퍼스널브랜딩", 134]]
+  };
+  var scatEl = $("scat"), srank = $("srank"), srankmsg = $("srankmsg");
   var ranks = loadRanks();
+  Object.keys(SEED).forEach(function (k) {
+    if (!ranks[k] || !ranks[k].items.length) {
+      ranks[k] = { at: SEED_AT, items: SEED[k].map(function (p) { return { tag: p[0], count: p[1] * 1000 }; }) };
+    }
+  });
 
   // 저장된 순위 { 카테고리: { at, items: [{tag, count}] } }. 모양이 틀린 항목은 버린다.
   function loadRanks() {
@@ -731,28 +740,19 @@
     } catch (e) { return {}; }
   }
 
+  // 고른 카테고리의 순위를 '인기 순위' 목록에 채운다. 같은 항목이 남아 있으면 선택을 유지한다.
   function renderTags() {
     var r = ranks[scatEl.value];
-    var list = r ? r.items : TAGS[scatEl.value].map(function (t) { return { tag: t, count: null }; });
-    stagsEl.textContent = "";
-    list.forEach(function (it, i) {
-      var li = document.createElement("li");
-      var b = document.createElement("button");
-      b.type = "button";
-      b.className = "chip";
-      if (r) {
-        var em = document.createElement("b");
-        em.textContent = (i + 1) + "위 ";
-        b.appendChild(em);
-      }
-      b.appendChild(document.createTextNode("#" + it.tag + (it.count == null ? "" : " · 조회수 " + fmt.format(Number(it.count)))));
-      b.addEventListener("click", function () { stagEl.value = it.tag; sgo.click(); });
-      li.appendChild(b);
-      stagsEl.appendChild(li);
+    var prev = spickEl.value;
+    spickEl.textContent = "";
+    r.items.forEach(function (it, i) {
+      var o = document.createElement("option");
+      o.value = it.tag;
+      o.textContent = (i + 1) + "위 " + it.tag + " · 조회수 " + fmt.format(Number(it.count));
+      spickEl.appendChild(o);
     });
-    srankmsg.textContent = r
-      ? "인스타그램 인기 릴스 " + RANK_SAMPLE + "개의 조회수 합 기준 · " + r.at + " 확인"
-      : "아직 순위를 확인하지 않았어요. 버튼을 누르면 순위를 매겨 드려요.";
+    if (prev && r.items.some(function (it) { return it.tag === prev; })) spickEl.value = prev;
+    srankmsg.textContent = "인스타그램 인기 릴스 " + RANK_SAMPLE + "개의 조회수 합 기준 · " + r.at + " 확인";
   }
 
   scatEl.addEventListener("change", renderTags);
